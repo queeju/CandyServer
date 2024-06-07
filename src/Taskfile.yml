@@ -1,0 +1,72 @@
+version: '3'
+
+vars:
+  SERVER_DIR: server
+  CLIENT_DIR: client
+  CERT_DIR: cert
+  CA_CERT: ca-cert.pem
+  CA_KEY: ca-key.pem
+  SERVER_CERT: server-cert.pem
+  SERVER_KEY: server-key.pem
+  CLIENT_CERT: client-cert.pem
+  CLIENT_KEY: client-key.pem
+  OPENSSL_CNF: openssl.cnf
+
+tasks:
+  build: 
+    desc: Build the server and client
+    cmds:
+      - task: build:server
+      - task: build:client
+
+  build:server:
+    desc: Build the candy server
+    cmds:
+      - cd server && go build -o ../candy-server
+
+  build:client:
+    desc: Build the candy client
+    cmds:
+      - cd client && go build -o ../candy-client main.go
+
+  certs:
+    desc: Generate certificates using OpenSSL
+    cmds:
+      - task: certs:ca
+      - task: certs:server
+      - task: certs:client
+
+  certs:ca:
+    desc: Generate CA certificate
+    cmds:
+      - openssl genpkey -algorithm RSA -out {{.CERT_DIR}}/{{.CA_KEY}}
+      - openssl req -x509 -new -nodes -key {{.CERT_DIR}}/{{.CA_KEY}} -sha256 -days 1825 -out {{.CERT_DIR}}/{{.CA_CERT}} -config  {{.CERT_DIR}}/{{.OPENSSL_CNF}}
+
+  certs:server:
+    desc: Generate server certificate
+    cmds:
+      - openssl genpkey -algorithm RSA -out {{.CERT_DIR}}/{{.SERVER_KEY}}
+      - openssl req -new -key {{.CERT_DIR}}/{{.SERVER_KEY}} -out {{.CERT_DIR}}/server.csr -config  {{.CERT_DIR}}/{{.OPENSSL_CNF}}
+      - openssl x509 -req -in {{.CERT_DIR}}/server.csr -CA {{.CERT_DIR}}/{{.CA_CERT}} -CAkey {{.CERT_DIR}}/{{.CA_KEY}} -CAcreateserial -out {{.CERT_DIR}}/{{.SERVER_CERT}} -days 1825 -sha256 -extensions req_ext -extfile {{.CERT_DIR}}/{{.OPENSSL_CNF}}
+
+  certs:client:
+    desc: Generate client certificate
+    cmds:
+      - openssl genpkey -algorithm RSA -out {{.CERT_DIR}}/{{.CLIENT_KEY}}
+      - openssl req -new -key {{.CERT_DIR}}/{{.CLIENT_KEY}} -out {{.CERT_DIR}}/client.csr -config {{.CERT_DIR}}/{{.OPENSSL_CNF}}
+      - openssl x509 -req -in {{.CERT_DIR}}/client.csr -CA {{.CERT_DIR}}/{{.CA_CERT}} -CAkey {{.CERT_DIR}}/{{.CA_KEY}} -CAcreateserial -out {{.CERT_DIR}}/{{.CLIENT_CERT}} -days 500 -sha256 -extfile {{.CERT_DIR}}/{{.OPENSSL_CNF}}
+
+  run-server:
+    desc: Run the candy server
+    cmds:
+      - ./candy-server -s
+
+  run-client:
+    desc: Run the candy client
+    cmds:
+      - ./candy-client -k AA -c 2 -m 50 -f
+
+  clean:
+    desc: "Clean the build files"
+    cmds:
+      - rm -rf ./candy-client ./candy-server
